@@ -8,6 +8,7 @@
   },
   "private": true,
   "dependencies": {
+    "global-agent": "^3.0.0",
     "https-proxy-agent": "^7.0.5",
     "node-fetch": "^3.3.2"
   }

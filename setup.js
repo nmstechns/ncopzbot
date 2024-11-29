@@ -1,6 +1,6 @@
 const fileSystem = require('fs');
 const readlineInterface = require('readline');
-const HttpsProxyAgent = require('https-proxy-agent');
+const { bootstrap } = require('global-agent');
 
 const TEXT_COLORS = {
     BOLD_YELLOW: '\x1b[1m\x1b[33m',
@@ -23,12 +23,10 @@ console.log(`${TEXT_COLORS.BOLD_YELLOW}${alignTextCenter("github.com/recitativon
 console.log(`${TEXT_COLORS.BOLD_YELLOW}${alignTextCenter("============================================", terminalWidth)}${TEXT_COLORS.RESET}`);
 console.log("");
 
-const dynamicFetch = (url, options = {}, proxy) => {
-    if (proxy) {
-        options.agent = new HttpsProxyAgent(proxy);
-    }
+const dynamicFetch = (url, options = {}) => {
     return import('node-fetch').then(({ default: fetch }) => fetch(url, options));
 };
+
 const checkEmailValidity = (email) => {
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailPattern.test(email);
@@ -157,6 +155,12 @@ const executeMain = async () => {
     userList.forEach(async ({ email, password, proxy }) => {
         const existingUserData = loadExistingData();
         const proxyChoice = proxyUsage ? proxy : (existingUserData[email]?.proxy || 'proxy');
+
+        if (proxyUsage) {
+            process.env.GLOBAL_AGENT_HTTP_PROXY = proxyChoice;
+            bootstrap();
+        }
+
         await createUserAccount(email, password, proxyChoice);
     });
 };
