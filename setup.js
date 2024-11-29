@@ -1,7 +1,7 @@
 const fileSystem = require('fs');
 const readlineInterface = require('readline');
+const HttpsProxyAgent = require('https-proxy-agent');
 
-// Define color codes
 const TEXT_COLORS = {
     BOLD_YELLOW: '\x1b[1m\x1b[33m',
     CYAN: '\x1b[36m',
@@ -9,7 +9,6 @@ const TEXT_COLORS = {
     RESET: '\x1b[0m'
 };
 
-// Function to center align text
 function alignTextCenter(text, width) {
     const padding = Math.floor((width - text.length) / 2);
     return ' '.repeat(padding) + text + ' '.repeat(padding);
@@ -24,16 +23,17 @@ console.log(`${TEXT_COLORS.BOLD_YELLOW}${alignTextCenter("github.com/recitativon
 console.log(`${TEXT_COLORS.BOLD_YELLOW}${alignTextCenter("============================================", terminalWidth)}${TEXT_COLORS.RESET}`);
 console.log("");
 
-// Function to dynamically import node-fetch
-const dynamicFetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-
-// Function to validate email format
+const dynamicFetch = (url, options = {}, proxy) => {
+    if (proxy) {
+        options.agent = new HttpsProxyAgent(proxy);
+    }
+    return import('node-fetch').then(({ default: fetch }) => fetch(url, options));
+};
 const checkEmailValidity = (email) => {
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailPattern.test(email);
 };
 
-// Function to read user data from user.txt
 const loadUserData = () => {
     const userData = fileSystem.readFileSync('user.txt', 'utf8');
     const userLines = userData.trim().split('\n');
@@ -47,7 +47,6 @@ const loadUserData = () => {
     }).filter(user => user !== null);
 };
 
-// Function to read existing data from data.txt
 const loadExistingData = () => {
     if (!fileSystem.existsSync('data.txt')) return {};
     const existingDataContent = fileSystem.readFileSync('data.txt', 'utf8');
@@ -63,7 +62,6 @@ const loadExistingData = () => {
     return existingDataMap;
 };
 
-// Function to save data to data.txt
 const persistData = (email, token, proxy) => {
     if (!email || !token || !proxy) {
         console.error('Data is incomplete, cannot save:', { email, token, proxy });
@@ -80,7 +78,6 @@ const persistData = (email, token, proxy) => {
     fileSystem.writeFileSync('data.txt', dataEntries.join('\n'), 'utf8');
 };
 
-// Function to prompt user for proxy usage
 const inquireProxyUsage = () => {
     return new Promise((resolve) => {
         const readlineInstance = readlineInterface.createInterface({
@@ -122,7 +119,6 @@ const authenticateUser = async (email, password, proxy) => {
 
 const createUserAccount = async (email, password, proxy) => {
     try {
-        // Extract the username from the email
         const userName = email.split('@')[0];
         const invitationCode = 'ol29b29fb1';
 
@@ -154,7 +150,6 @@ const createUserAccount = async (email, password, proxy) => {
     }
 };
 
-// Main function to execute the script
 const executeMain = async () => {
     const proxyUsage = await inquireProxyUsage();
     const userList = loadUserData();
