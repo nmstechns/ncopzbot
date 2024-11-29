@@ -77,7 +77,7 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
 
         logBandwidthResponse(responseData);
     } catch (error) {
-        console.error('Error during bandwidth distribution:', error.message);
+        console.error(`\x1b[1m\x1b[36m[${index + 1}]\x1b[0m Error during bandwidth sharing: ${error.message}`);
     }
 };
 
