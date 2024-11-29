@@ -1,7 +1,7 @@
 # OpenLoop Sentry Node bot
 
 ## Description
-This script automates registration, network or node operations and daily claim for OpenLoop Sentry Node.
+This script automates registration, network or node operations for OpenLoop Sentry Node.
 
 ## Features
 - **Automated node interaction**
