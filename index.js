@@ -36,7 +36,7 @@ const loadDataFile = () => {
 };
 
 const parseProxy = (proxy) => {
-    if (!proxy.startsWith('http://')) {
+    if (!proxy.startsWith('http://') && !proxy.startsWith('https://')) {
         proxy = 'http://' + proxy;
     }
     return proxy;
