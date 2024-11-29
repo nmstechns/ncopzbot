@@ -35,10 +35,17 @@ const loadDataFile = () => {
     }).filter(item => item.token && item.proxy);
 };
 
+const parseProxy = (proxy) => {
+    if (!proxy.startsWith('http://')) {
+        proxy = 'http://' + proxy;
+    }
+    return proxy;
+};
+
 const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
     try {
         const randomQuality = qualitygen();
-        const agent = useProxy ? new ProxyAgent(proxy) : undefined;
+        const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
 
         const fetch = (await import('node-fetch')).default;
 
