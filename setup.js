@@ -148,6 +148,23 @@ const createUserAccount = async (email, password, proxy) => {
     }
 };
 
+const parseProxy = (proxy) => {
+    const proxyPattern = /^(?:(https?:\/\/)?(?:(\w+):(\w+)@)?)?([\w.]+):(\d+)$/;
+    const match = proxy.match(proxyPattern);
+
+    if (!match) {
+        throw new Error(`Invalid proxy format: ${proxy}`);
+    }
+
+    const [, protocol = 'http://', username, password, host, port] = match;
+    let proxyUrl = `${protocol}${host}:${port}`;
+
+    if (username && password) {
+        proxyUrl = `${protocol}${username}:${password}@${host}:${port}`;
+    }
+
+    return proxyUrl;
+};
 const executeMain = async () => {
     const proxyUsage = await inquireProxyUsage();
     const userList = loadUserData();
@@ -157,8 +174,14 @@ const executeMain = async () => {
         const proxyChoice = proxyUsage ? proxy : (existingUserData[email]?.proxy || 'proxy');
 
         if (proxyUsage) {
-            process.env.GLOBAL_AGENT_HTTP_PROXY = proxyChoice;
-            bootstrap();
+            try {
+                const parsedProxy = parseProxy(proxyChoice);
+                process.env.GLOBAL_AGENT_HTTP_PROXY = parsedProxy;
+                bootstrap();
+            } catch (error) {
+                console.error('Failed to parse proxy:', error.message);
+                return;
+            }
         }
 
         await createUserAccount(email, password, proxyChoice);
