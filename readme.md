@@ -16,7 +16,7 @@ This script automates registration, network or node operations for OpenLoop Sent
 
 1. Clone the repository to your local machine:
    ```bash
-	git clone https://github.com/recitativonika/openloop-node-bot.git
+   git clone https://github.com/recitativonika/openloop-node-bot.git
    ```
 2. Navigate to the project directory:
    ```bash
