@@ -145,6 +145,7 @@ const createUserAccount = async (email, password, proxy) => {
         await authenticateUser(email, password, proxy);
     } catch (error) {
         console.error('An error occurred during registration:', error.message);
+        await authenticateUser(email, password, proxy);
     }
 };
 
