@@ -1,9 +1,13 @@
 const fileSystem = require('fs');
 const readlineInterface = require('readline');
 const { HttpsProxyAgent: ProxyAgent } = require('https-proxy-agent');
+const dynamicFetch = (url, options = {}) => import('node-fetch').then(({ default: fetch }) => fetch(url, options));
 
 const TEXT_COLORS = {
     BOLD_GOLD: '\x1b[1m\x1b[33m',
+    CYAN: '\x1b[1m\x1b[36m',
+    GREEN: '\x1b[1m\x1b[32m',
+    RED: '\x1b[1m\x1b[31m',
     RESET_COLOR: '\x1b[0m'
 };
 
@@ -35,11 +39,51 @@ const loadDataFile = () => {
     }).filter(item => item.token && item.proxy);
 };
 
+const loadUserData = () => {
+    const userData = fileSystem.readFileSync('user.txt', 'utf8');
+    return userData.split('\n').map(line => {
+        const [email, password, proxy] = line.split(',').map(item => item.trim());
+        return { email, password, proxy };
+    }).filter(user => user.email && user.password);
+};
+
 const parseProxy = (proxy) => {
     if (!proxy.startsWith('http://') && !proxy.startsWith('https://')) {
         proxy = 'http://' + proxy;
     }
     return proxy;
+};
+
+const persistData = (email, token, proxy) => {
+    const currentData = loadDataFile().reduce((acc, { email, token, proxy }) => {
+        acc[email] = { token, proxy };
+        return acc;
+    }, {});
+    currentData[email] = { token, proxy };
+    const dataEntries = Object.entries(currentData).map(([email, { token, proxy }]) => `${email},${token},${proxy}`);
+    fileSystem.writeFileSync('data.txt', dataEntries.join('\n'), 'utf8');
+};
+
+const authenticateUser = async (email, password, proxy) => {
+    try {
+        const loginDetails = { username: email, password };
+        const loginResult = await dynamicFetch('https://api.openloop.so/users/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(loginDetails),
+        });
+        if (!loginResult.ok) {
+            throw new Error(`Login attempt failed! Status: ${loginResult.status}`);
+        }
+        const loginInfo = await loginResult.json();
+        const userAccessToken = loginInfo.data.accessToken;
+        console.log(`Successfully logged in for ${email}, information stored in data.txt`);
+        persistData(email, userAccessToken, proxy);
+        return userAccessToken;
+    } catch (error) {
+        console.error('An error occurred during login:', error.message);
+        return null;
+    }
 };
 
 const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
@@ -51,9 +95,7 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
 
         const response = await fetch('https://api.openloop.so/bandwidth/share', {
             method: 'POST',
-            body: JSON.stringify({
-                quality: randomQuality
-            }),
+            body: JSON.stringify({ quality: randomQuality }),
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -62,7 +104,19 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
         });
 
         if (!response.ok) {
-            throw new Error(`Bandwidth sharing failed! Status: ${response.statusText}`);
+            if (response.status === 401) {
+                console.error(`${TEXT_COLORS.RED}[${index + 1}] Token expired for ${email}. Attempting to refresh the token.${TEXT_COLORS.RESET_COLOR}`);
+                const userData = loadUserData().find(user => user.email === email);
+                if (userData) {
+                    const newToken = await authenticateUser(userData.email, userData.password, proxy);
+                    if (newToken) {
+                        distributeBandwidth(newToken, proxy, useProxy, email, index);
+                    }
+                }
+            } else {
+                throw new Error(`Bandwidth sharing failed! Status: ${response.statusText}`);
+            }
+            return;
         }
 
         const responseData = await response.json();
@@ -71,13 +125,13 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
             if (response && response.data && response.data.balances) {
                 const balance = response.data.balances.POINT;
                 const proxyMessage = useProxy ? ` (proxy used: ${proxy})` : '';
-                console.log(`\x1b[1m\x1b[36m[${index + 1}]\x1b[0m Bandwidth sharing for \x1b[1m\x1b[33m${email}\x1b[0m was \x1b[1m\x1b[32msuccessful\x1b[0m, score: \x1b[1m\x1b[36m${randomQuality}\x1b[0m, total earnings: \x1b[1m\x1b[36m${balance}\x1b[0m${proxyMessage}`);
+                console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} Bandwidth sharing for ${TEXT_COLORS.BOLD_GOLD}${email}${TEXT_COLORS.RESET_COLOR} was ${TEXT_COLORS.GREEN}successful${TEXT_COLORS.RESET_COLOR}, score: ${TEXT_COLORS.CYAN}${randomQuality}${TEXT_COLORS.RESET_COLOR}, total earnings: ${TEXT_COLORS.CYAN}${balance}${TEXT_COLORS.RESET_COLOR}${proxyMessage}`);
             }
         };
 
         logBandwidthResponse(responseData);
     } catch (error) {
-        console.error(`\x1b[1m\x1b[31m[${index + 1}]\x1b[0m Error during bandwidth sharing: ${error.message}`);
+        console.error(`${TEXT_COLORS.RED}[${index + 1}] Error during bandwidth sharing: ${error.message}${TEXT_COLORS.RESET_COLOR}`);
     }
 };
 
@@ -87,9 +141,9 @@ const executeMain = () => {
         output: process.stdout
     });
 
-    rl.question('\x1b[1m\x1b[33mWould you like to use a proxy? (y/n): \x1b[0m', (answer) => {
+    rl.question(`${TEXT_COLORS.BOLD_GOLD}Would you like to use a proxy? (y/n): ${TEXT_COLORS.RESET_COLOR}`, (answer) => {
         const useProxy = answer.toLowerCase() === 'y';
-        console.log(`\x1b[1m\x1b[33mInitiating bandwidth sharing every minute... Proxy usage: ${useProxy}\x1b[0m`);
+        console.log(`${TEXT_COLORS.BOLD_GOLD}Initiating bandwidth sharing every minute... Proxy usage: ${useProxy}${TEXT_COLORS.RESET_COLOR}`);
         const dataEntries = loadDataFile();
         dataEntries.forEach(({ email, token, proxy }, index) => {
             distributeBandwidth(token, proxy, useProxy, email, index);
