@@ -5,6 +5,7 @@ This script automates registration, network or node operations for OpenLoop Sent
 
 ## Features
 - **Automated node interaction**
+- **Automated task mission***
 - **Automatic account registration**
 - **Multi account**
 - **Proxy support**
