@@ -187,7 +187,9 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCo
                         const newToken = await authenticateUser(userData.email, userData.password, proxy);
                         if (newToken) {
                             errorCounter[email] = 0;
+
                             distributeBandwidth(newToken, proxy, useProxy, email, index, errorCounter);
+                            return;
                         }
                     }
                 }
