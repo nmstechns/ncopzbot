@@ -159,6 +159,8 @@ const completeMission = async (missionId, token, useProxy, proxy, index) => {
     }
 };
 
+const lastRefreshTime = {};
+
 const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCounter) => {
     try {
         const randomQuality = qualitygen();
@@ -178,20 +180,29 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCo
 
         if (!response.ok) {
             if (response.status === 401) {
-                errorCounter[email] = (errorCounter[email] || 0) + 1;
-                console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Token expired for ${email}. Attempt ${errorCounter[email]} of 5.${TEXT_COLORS.RESET_COLOR}`);
-                if (errorCounter[email] >= 5) {
-                    console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Refreshing token for ${email} after 5 failed attempts.${TEXT_COLORS.RESET_COLOR}`);
-                    const userData = loadUserData().find(user => user.email === email);
-                    if (userData) {
-                        const newToken = await authenticateUser(userData.email, userData.password, proxy);
-                        if (newToken) {
-                            errorCounter[email] = 0;
+                const now = Date.now();
+                const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
 
-                            distributeBandwidth(newToken, proxy, useProxy, email, index, errorCounter);
-                            return;
+                if (!lastRefreshTime[email] || (now - lastRefreshTime[email]) > twoDaysInMillis) {
+                    errorCounter[email] = (errorCounter[email] || 0) + 1;
+                    console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Token expired for ${email}. Attempt ${errorCounter[email]} of 5.${TEXT_COLORS.RESET_COLOR}`);
+
+                    if (errorCounter[email] >= 5) {
+                        console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Refreshing token for ${email} after 5 failed attempts.${TEXT_COLORS.RESET_COLOR}`);
+                        const userData = loadUserData().find(user => user.email === email);
+                        if (userData) {
+                            const newToken = await authenticateUser(userData.email, userData.password, proxy);
+                            if (newToken) {
+                                errorCounter[email] = 0;
+                                lastRefreshTime[email] = now;
+                                distributeBandwidth(newToken, proxy, useProxy, email, index, errorCounter);
+                                return;
+                            }
                         }
                     }
+                } else {
+
+                    console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.YELLOW}Token expired for ${email}, but refresh is suppressed for 2 days.${TEXT_COLORS.RESET_COLOR}`);
                 }
             } else {
                 console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Bandwidth sharing failed! Status: ${response.statusText}${TEXT_COLORS.RESET_COLOR}`);
