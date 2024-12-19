@@ -159,8 +159,6 @@ const completeMission = async (missionId, token, useProxy, proxy, index) => {
     }
 };
 
-const lastRefreshTime = {};
-
 const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCounter) => {
     try {
         const randomQuality = qualitygen();
@@ -180,29 +178,24 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCo
 
         if (!response.ok) {
             if (response.status === 401) {
-                const now = Date.now();
-                const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
-
-                if (!lastRefreshTime[email] || (now - lastRefreshTime[email]) > twoDaysInMillis) {
-                    errorCounter[email] = (errorCounter[email] || 0) + 1;
-                    console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Token expired for ${email}. Attempt ${errorCounter[email]} of 5.${TEXT_COLORS.RESET_COLOR}`);
-
-                    if (errorCounter[email] >= 5) {
-                        console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Refreshing token for ${email} after 5 failed attempts.${TEXT_COLORS.RESET_COLOR}`);
-                        const userData = loadUserData().find(user => user.email === email);
-                        if (userData) {
-                            const newToken = await authenticateUser(userData.email, userData.password, proxy);
-                            if (newToken) {
-                                errorCounter[email] = 0;
-                                lastRefreshTime[email] = now;
-                                distributeBandwidth(newToken, proxy, useProxy, email, index, errorCounter);
-                                return;
+                errorCounter[email] = (errorCounter[email] || 0) + 1;
+                console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Token expired for ${email}. Attempt ${errorCounter[email]} of 5.${TEXT_COLORS.RESET_COLOR}`);
+                if (errorCounter[email] >= 5) {
+                    console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Refreshing token for ${email} after 5 failed attempts.${TEXT_COLORS.RESET_COLOR}`);
+                    const userData = loadUserData().find(user => user.email === email);
+                    if (userData) {
+                        const newToken = await authenticateUser(userData.email, userData.password, proxy);
+                        if (newToken) {
+                            errorCounter[email] = 0;
+                            const entry = dataEntries.find(entry => entry.email === email);
+                            if (entry) {
+                                entry.token = newToken;
                             }
+                            persistData(email, newToken, proxy);
+                            dataEntries = loadDataFile();
+                            distributeBandwidth(newToken, proxy, useProxy, email, index, errorCounter);
                         }
                     }
-                } else {
-
-                    console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.YELLOW}Token expired for ${email}, but refresh is suppressed for 2 days.${TEXT_COLORS.RESET_COLOR}`);
                 }
             } else {
                 console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Bandwidth sharing failed! Status: ${response.statusText}${TEXT_COLORS.RESET_COLOR}`);
@@ -227,6 +220,8 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCo
     await handleMissions(token, useProxy, proxy, index);
 };
 
+let dataEntries = loadDataFile();
+
 const executeMain = () => {
     const rl = readlineInterface.createInterface({
         input: process.stdin,
@@ -236,7 +231,6 @@ const executeMain = () => {
     rl.question(`${TEXT_COLORS.BOLD_GOLD}Would you like to use a proxy? (y/n): ${TEXT_COLORS.RESET_COLOR}`, (answer) => {
         const useProxy = answer.toLowerCase() === 'y';
         console.log(`${TEXT_COLORS.BOLD_GOLD}Initiating bandwidth sharing every minute... Proxy usage: ${useProxy}${TEXT_COLORS.RESET_COLOR}`);
-        const dataEntries = loadDataFile();
         const errorCounter = {};
         dataEntries.forEach(({ email, token, proxy }, index) => {
             distributeBandwidth(token, proxy, useProxy, email, index, errorCounter);
