@@ -49,6 +49,7 @@ This script automates registration, network or node operations for OpenLoop Sent
    ```bash
    node index.js
    ```
+   The script will auto refresh the token when expired.
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
