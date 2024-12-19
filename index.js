@@ -8,6 +8,7 @@ const TEXT_COLORS = {
     CYAN: '\x1b[1m\x1b[36m',
     GREEN: '\x1b[1m\x1b[32m',
     RED: '\x1b[1m\x1b[31m',
+    YELLOW: '\x1b[1m\x1b[33m',
     RESET_COLOR: '\x1b[0m'
 };
 
@@ -86,7 +87,79 @@ const authenticateUser = async (email, password, proxy) => {
     }
 };
 
-const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
+const fetchMissions = async (token, useProxy, proxy) => {
+    try {
+        const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
+        const fetch = (await import('node-fetch')).default;
+
+        const response = await fetch('https://api.openloop.so/missions', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            agent: agent,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch missions! Status: ${response.statusText}`);
+        }
+
+        const missionsData = await response.json();
+        return Array.isArray(missionsData.data.missions) ? missionsData.data.missions : [];
+    } catch (error) {
+        console.error(`Error fetching missions: ${error.message}`);
+        return [];
+    }
+};
+
+const handleMissions = async (token, useProxy, proxy, index) => {
+    const missions = await fetchMissions(token, useProxy, proxy);
+    const availableMissions = missions.filter(mission => mission.status === 'available');
+
+    if (availableMissions.length > 0) {
+        const missionIds = availableMissions.map(mission => mission.missionId).join(' ');
+        console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} Missions available ${TEXT_COLORS.GREEN}${missionIds}${TEXT_COLORS.RESET_COLOR}`);
+    } else {
+        console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.YELLOW}No missions available${TEXT_COLORS.RESET_COLOR}`);
+    }
+
+    for (const mission of availableMissions) {
+        if (mission.missionId) {
+            await completeMission(mission.missionId, token, useProxy, proxy, index);
+        } else {
+            console.error('Mission ID is undefined for mission:', mission);
+        }
+    }
+};
+
+const completeMission = async (missionId, token, useProxy, proxy, index) => {
+    try {
+        const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
+        const fetch = (await import('node-fetch')).default;
+
+        const response = await fetch(`https://api.openloop.so/missions/${missionId}/complete`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            agent: agent,
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Failed to complete mission ${missionId}! Status: ${response.statusText}, Response: ${errorText}`);
+            return;
+        }
+
+        console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} Mission ${missionId} completed successfully.`);
+    } catch (error) {
+        console.error(`Error completing mission ${missionId}: ${error.message}`);
+    }
+};
+
+const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCounter) => {
     try {
         const randomQuality = qualitygen();
         const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
@@ -105,34 +178,40 @@ const distributeBandwidth = async (token, proxy, useProxy, email, index) => {
 
         if (!response.ok) {
             if (response.status === 401) {
-                console.error(`${TEXT_COLORS.RED}[${index + 1}] Token expired for ${email}. Attempting to refresh the token.${TEXT_COLORS.RESET_COLOR}`);
-                const userData = loadUserData().find(user => user.email === email);
-                if (userData) {
-                    const newToken = await authenticateUser(userData.email, userData.password, proxy);
-                    if (newToken) {
-                        distributeBandwidth(newToken, proxy, useProxy, email, index);
+                errorCounter[email] = (errorCounter[email] || 0) + 1;
+                console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Token expired for ${email}. Attempt ${errorCounter[email]} of 5.${TEXT_COLORS.RESET_COLOR}`);
+                if (errorCounter[email] >= 5) {
+                    console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Refreshing token for ${email} after 5 failed attempts.${TEXT_COLORS.RESET_COLOR}`);
+                    const userData = loadUserData().find(user => user.email === email);
+                    if (userData) {
+                        const newToken = await authenticateUser(userData.email, userData.password, proxy);
+                        if (newToken) {
+                            errorCounter[email] = 0;
+                            distributeBandwidth(newToken, proxy, useProxy, email, index, errorCounter);
+                        }
                     }
                 }
             } else {
-                throw new Error(`Bandwidth sharing failed! Status: ${response.statusText}`);
+                console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Bandwidth sharing failed! Status: ${response.statusText}${TEXT_COLORS.RESET_COLOR}`);
             }
-            return;
+        } else {
+            const responseData = await response.json();
+            const logBandwidthResponse = (response) => {
+                if (response && response.data && response.data.balances) {
+                    const balance = response.data.balances.POINT;
+                    const proxyMessage = useProxy ? ` (proxy used: ${proxy})` : '';
+                    console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} Bandwidth sharing for ${TEXT_COLORS.BOLD_GOLD}${email}${TEXT_COLORS.RESET_COLOR} was ${TEXT_COLORS.GREEN}successful${TEXT_COLORS.RESET_COLOR}, score: ${TEXT_COLORS.CYAN}${randomQuality}${TEXT_COLORS.RESET_COLOR}, total earnings: ${TEXT_COLORS.CYAN}${balance}${TEXT_COLORS.RESET_COLOR}${proxyMessage}`);
+                }
+            };
+            logBandwidthResponse(responseData);
+            errorCounter[email] = 0;
         }
 
-        const responseData = await response.json();
-
-        const logBandwidthResponse = (response) => {
-            if (response && response.data && response.data.balances) {
-                const balance = response.data.balances.POINT;
-                const proxyMessage = useProxy ? ` (proxy used: ${proxy})` : '';
-                console.log(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} Bandwidth sharing for ${TEXT_COLORS.BOLD_GOLD}${email}${TEXT_COLORS.RESET_COLOR} was ${TEXT_COLORS.GREEN}successful${TEXT_COLORS.RESET_COLOR}, score: ${TEXT_COLORS.CYAN}${randomQuality}${TEXT_COLORS.RESET_COLOR}, total earnings: ${TEXT_COLORS.CYAN}${balance}${TEXT_COLORS.RESET_COLOR}${proxyMessage}`);
-            }
-        };
-
-        logBandwidthResponse(responseData);
     } catch (error) {
-        console.error(`${TEXT_COLORS.RED}[${index + 1}] Error during bandwidth sharing: ${error.message}${TEXT_COLORS.RESET_COLOR}`);
+        console.error(`${TEXT_COLORS.CYAN}[${index + 1}]${TEXT_COLORS.RESET_COLOR} ${TEXT_COLORS.RED}Error during bandwidth sharing: ${error.message}${TEXT_COLORS.RESET_COLOR}`);
     }
+
+    await handleMissions(token, useProxy, proxy, index);
 };
 
 const executeMain = () => {
@@ -145,12 +224,13 @@ const executeMain = () => {
         const useProxy = answer.toLowerCase() === 'y';
         console.log(`${TEXT_COLORS.BOLD_GOLD}Initiating bandwidth sharing every minute... Proxy usage: ${useProxy}${TEXT_COLORS.RESET_COLOR}`);
         const dataEntries = loadDataFile();
+        const errorCounter = {};
         dataEntries.forEach(({ email, token, proxy }, index) => {
-            distributeBandwidth(token, proxy, useProxy, email, index);
+            distributeBandwidth(token, proxy, useProxy, email, index, errorCounter);
         });
         setInterval(() => {
             dataEntries.forEach(({ email, token, proxy }, index) => {
-                distributeBandwidth(token, proxy, useProxy, email, index);
+                distributeBandwidth(token, proxy, useProxy, email, index, errorCounter);
             });
         }, 60 * 1000);
 
