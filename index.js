@@ -48,13 +48,6 @@ const loadUserData = () => {
     }).filter(user => user.email && user.password);
 };
 
-const parseProxy = (proxy) => {
-    if (!proxy.startsWith('http://') && !proxy.startsWith('https://')) {
-        proxy = 'http://' + proxy;
-    }
-    return proxy;
-};
-
 const persistData = (email, token, proxy) => {
     const currentData = loadDataFile().reduce((acc, { email, token, proxy }) => {
         acc[email] = { token, proxy };
@@ -89,7 +82,7 @@ const authenticateUser = async (email, password, proxy) => {
 
 const fetchMissions = async (token, useProxy, proxy) => {
     try {
-        const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
+        const agent = useProxy ? new ProxyAgent(proxy) : undefined;
         const fetch = (await import('node-fetch')).default;
 
         const response = await fetch('https://api.openloop.so/missions', {
@@ -135,7 +128,7 @@ const handleMissions = async (token, useProxy, proxy, index) => {
 
 const completeMission = async (missionId, token, useProxy, proxy, index) => {
     try {
-        const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
+        const agent = useProxy ? new ProxyAgent(proxy) : undefined;
         const fetch = (await import('node-fetch')).default;
 
         const response = await fetch(`https://api.openloop.so/missions/${missionId}/complete`, {
@@ -162,7 +155,7 @@ const completeMission = async (missionId, token, useProxy, proxy, index) => {
 const distributeBandwidth = async (token, proxy, useProxy, email, index, errorCounter) => {
     try {
         const randomQuality = qualitygen();
-        const agent = useProxy ? new ProxyAgent(parseProxy(proxy)) : undefined;
+        const agent = useProxy ? new ProxyAgent(proxy) : undefined;
 
         const fetch = (await import('node-fetch')).default;
 
